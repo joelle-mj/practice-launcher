@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Violin Tuner</title>
+<meta name="apple-mobile-web-app-title" content="Tuner">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b1a3a">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
+<style>
+:root{--navy:#1f2a44;--ivory:#faf6ee;--gold:#b08d57;--line:#e6dccb;--ok:#4f7a5a;--brand:#7a2e3b}
+*{box-sizing:border-box}html,body{margin:0;background:var(--ivory);color:var(--navy);font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+header{background:#0b1a3a;color:#f8f3e6;text-align:center;padding:14px;padding-top:calc(14px + env(safe-area-inset-top));font-size:24px;letter-spacing:.04em;border-bottom:3px solid var(--gold)}
+main{max-width:720px;margin:0 auto;padding:16px;text-align:center}
+.tface{border-radius:24px;padding:18px 10px 12px;margin:8px auto 14px;background:#f3efe6;transition:background .25s;border:1px solid var(--line)}
+.tface.ok{background:#cfe8cf}.tface.close{background:#f6e7a6}.tface.off{background:#f7c99a}.tface.far{background:#f2a7a0}
+.face{font-size:56px;line-height:1}.note{font-size:120px;font-weight:700;line-height:1;font-family:Helvetica,Arial,sans-serif}.note sub{font-size:40px}
+.cents{font-size:28px;font-weight:700;font-family:Helvetica,Arial,sans-serif;min-height:34px}
+.hbar{position:relative;height:34px;max-width:600px;margin:14px auto 4px;border-radius:17px;background:linear-gradient(90deg,#d9736a,#e9a86a 30%,#e9d27a 42%,#7fb27f 47%,#7fb27f 53%,#e9d27a 58%,#e9a86a 70%,#d9736a)}
+.hmid{position:absolute;left:50%;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--navy);opacity:.5}
+.hneedle{position:absolute;top:-8px;width:8px;height:50px;margin-left:-4px;background:var(--navy);border-radius:4px;transition:left .12s}
+.ticks{display:flex;justify-content:space-between;max-width:600px;margin:0 auto;font-size:14px}.hz{font-size:16px;margin-top:6px;opacity:.7}
+.strings{display:flex;gap:14px;justify-content:center;margin:12px 0}
+.strings button{width:92px;height:92px;border-radius:50%;font-size:36px;background:#fff;color:var(--navy);border:4px solid var(--line);font-family:Helvetica,Arial,sans-serif;font-weight:700}
+.strings button.sel{border-color:var(--gold)}.strings button.play{border-color:var(--ok);background:#cfe8cf}.strings button.on{border-color:var(--ok)}
+.big{font-size:24px;padding:16px 30px;border-radius:18px;border:0;background:var(--navy);color:#fff;font-family:Helvetica,Arial,sans-serif;font-weight:700;margin:6px;min-width:200px}
+.big.ghost{background:#fff;color:var(--brand);border:2px solid var(--brand)}
+.msg{color:var(--brand);font-size:17px;min-height:22px}.muted{opacity:.7;font-size:15px}input[type=range]{width:60%;max-width:360px;accent-color:var(--brand)}
+</style></head><body>
+<header>Violin Tuner</header>
+<main>
+<div id="face" class="tface"><div class="face" id="emo">&#x1F610;</div><div class="note" id="note">A<sub>4</sub></div>
+<div class="cents" id="cents">Tap Listen, then play one string</div>
+<div class="hbar"><div class="hmid"></div><div class="hneedle" id="needle" style="left:50%"></div></div>
+<div class="ticks"><span>&minus;50&cent;</span><span>0</span><span>+50&cent;</span></div><div class="hz" id="hz">440.0 Hz</div></div>
+<p><button class="big" id="listen">&#x1F3A4; Listen</button><button class="big ghost" id="stop" hidden>&#x23F9; Stop</button></p>
+<p class="msg" id="msg"></p>
+<p><b>Reference note</b> <span class="muted">(tap to play, tap again to stop)</span></p>
+<div class="strings" id="strings"></div>
+<p>A4 = <b id="a4v">440</b> Hz <input id="a4" type="range" min="435" max="445" step="1" value="440"></p>
+<p class="muted">No sound? Turn the volume up and check the silent switch. Sound and microphone stay on this device.</p>
+</main>
+<script>
+/* Studio audio: YIN pitch detection, note math, tuner controller, lookahead metronome. No dependencies. */
+var StudioAudio = (function(){
+  var NAMES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+  var STRINGS=[{name:'G',oct:3,midi:55},{name:'D',oct:4,midi:62},{name:'A',oct:4,midi:69},{name:'E',oct:5,midi:76}];
+
+  /** YIN pitch detection. Returns {freq, clarity} or null. buf: Float32Array, sr: sample rate. */
+  function detectPitch(buf,sr,opts){
+    opts=opts||{}; var thr=opts.threshold||0.12, minF=opts.minFreq||150, maxF=opts.maxFreq||1500;
+    var n=buf.length, rms=0; for(var i=0;i<n;i++) rms+=buf[i]*buf[i]; rms=Math.sqrt(rms/n);
+    if(rms<(opts.minRms||0.01)) return null;
+    var maxTau=Math.min(Math.floor(sr/minF), Math.floor(n/2)), minTau=Math.max(2,Math.floor(sr/maxF));
+    var W=n-maxTau, d=new Float32Array(maxTau+1), cm=new Float32Array(maxTau+1);
+    for(var tau=1;tau<=maxTau;tau++){ var s=0; for(var j=0;j<W;j++){ var x=buf[j]-buf[j+tau]; s+=x*x; } d[tau]=s; }
+    cm[0]=1; var run=0;
+    for(tau=1;tau<=maxTau;tau++){ run+=d[tau]; cm[tau]=run?d[tau]*tau/run:1; }
+    var best=-1;
+    for(tau=minTau;tau<=maxTau;tau++){ if(cm[tau]<thr){ while(tau+1<=maxTau&&cm[tau+1]<cm[tau]) tau++; best=tau; break; } }
+    if(best<0){ var mn=1; for(tau=minTau;tau<=maxTau;tau++) if(cm[tau]<mn){mn=cm[tau];best=tau;} if(mn>0.35) return null; }
+    var t=best;
+    if(t>1&&t<maxTau){ var a=cm[t-1],b=cm[t],c=cm[t+1],den=a+c-2*b; if(den) t=t+(a-c)/(2*den); }
+    return {freq:sr/t, clarity:1-cm[best]};
+  }
+  /** Note name + cents for a frequency, relative to reference A4 (435–445). */
+  function noteInfo(freq,a4){
+    a4=a4||440; var midiF=69+12*Math.log2(freq/a4), midi=Math.round(midiF);
+    return {midi:midi,name:NAMES[(midi%12+12)%12],octave:Math.floor(midi/12)-1,cents:Math.round((midiF-midi)*100),
+      freq:freq,target:a4*Math.pow(2,(midi-69)/12)};
+  }
+  function centsFrom(freq,target){ return 1200*Math.log2(freq/target); }
+  function stringFreq(s,a4){ return (a4||440)*Math.pow(2,(s.midi-69)/12); }
+  function nearestString(freq,a4){ var best=null,bd=1e9; STRINGS.forEach(function(s){ var c=Math.abs(centsFrom(freq,stringFreq(s,a4))); if(c<bd){bd=c;best=s;} }); return bd<350?best:null; }
+
+  var ctx=null, htmlUnlocked=false;
+  var SILENT='data:audio/wav;base64,'+'UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+  /** Must be called from a tap/click (iPad/iPhone Safari requires a user gesture). Creates/resumes the one shared AudioContext. */
+  function unlock(){
+    var AC=window.AudioContext||window.webkitAudioContext; if(!AC) throw new Error('This browser has no Web Audio');
+    /* iPhone: Web Audio is in the "ambient" category and the ring/silent switch mutes it. Ask for "playback" (Safari 16.4+),
+       and play a tiny silent HTML audio element once, which moves the page into the media-playback category on older iOS. */
+    try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){}
+    if(!htmlUnlocked){ htmlUnlocked=true; try{ var el=new Audio(SILENT); el.setAttribute('playsinline',''); var pr=el.play(); if(pr&&pr.catch) pr.catch(function(){}); }catch(e){} }
+    if(!ctx||ctx.state==='closed') ctx=new AC();
+    if(ctx.state!=='running'){ try{ var r=ctx.resume(); if(r&&r.catch) r.catch(function(){}); }catch(e){} }
+    var b=ctx.createBuffer(1,1,22050), s=ctx.createBufferSource(); s.buffer=b; s.connect(ctx.destination); s.start(0);
+    return ctx;
+  }
+  /** Run fn once the context clock is actually moving (resume() is async on iOS). */
+  function whenRunning(fn){ var c=ctx, tries=0; (function chk(){ if(c.state==='running'||tries++>40) fn(); else { try{ c.resume(); }catch(e){} setTimeout(chk,25); } })(); }
+
+  /* ---- Tuner ---- */
+  function Tuner(onUpdate){ this.onUpdate=onUpdate; this.a4=440; this.running=false; }
+  Tuner.prototype.start=function(){
+    var self=this, c=unlock();
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('NO_MIC_API'));
+    return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}).then(function(stream){
+      self.stream=stream; self.src=c.createMediaStreamSource(stream);
+      self.an=c.createAnalyser(); self.an.fftSize=4096; self.src.connect(self.an);
+      self.buf=new Float32Array(self.an.fftSize); self.running=true; self.smooth=null; self.loop(); });
+  };
+  Tuner.prototype.loop=function(){
+    var self=this; if(!self.running) return;
+    self.an.getFloatTimeDomainData(self.buf);
+    var p=detectPitch(self.buf,ctx.sampleRate);
+    if(p){ self.smooth=self.smooth&&Math.abs(centsFrom(p.freq,self.smooth))<50?self.smooth*0.7+p.freq*0.3:p.freq;
+      var info=noteInfo(self.smooth,self.a4); info.string=nearestString(self.smooth,self.a4); self.onUpdate(info); }
+    else self.onUpdate(null);
+    self.raf=requestAnimationFrame(function(){self.loop();});
+  };
+  Tuner.prototype.stop=function(){ this.running=false; cancelAnimationFrame(this.raf); if(this.stream) this.stream.getTracks().forEach(function(t){t.stop();}); };
+  /** Play a reference tone for a string (2 s). */
+  function playTone(freq){ var c=unlock(), o=c.createOscillator(), g=c.createGain(), t=c.currentTime;
+    o.type='triangle'; o.frequency.value=freq; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.25,t+0.05); g.gain.setValueAtTime(0.25,t+1.7); g.gain.linearRampToValueAtTime(0,t+2);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+2.05); }
+
+  /** Sustained reference tone (violin-ish: sawtooth through a low-pass) until stopTone(). Call from a tap. */
+  var held=null;
+  function startTone(freq){ stopTone(); var c=unlock(), t=c.currentTime, o=c.createOscillator(), o2=c.createOscillator(), f=c.createBiquadFilter(), g=c.createGain();
+    o.type='sawtooth'; o.frequency.value=freq; o2.type='sine'; o2.frequency.value=freq; f.type='lowpass'; f.frequency.value=Math.min(4000,freq*5);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.22,t+0.08);
+    o.connect(f); o2.connect(f); f.connect(g); g.connect(c.destination); o.start(t); o2.start(t); held={o:o,o2:o2,g:g,freq:freq}; return held; }
+  function stopTone(){ if(!held||!ctx) return; var h=held, t=ctx.currentTime; held=null;
+    try{ h.g.gain.cancelScheduledValues(t); h.g.gain.setValueAtTime(h.g.gain.value,t); h.g.gain.linearRampToValueAtTime(0,t+0.08); h.o.stop(t+0.1); h.o2.stop(t+0.1); }catch(e){} }
+  function toneOn(){ return held?held.freq:0; }
+
+  /* ---- Metronome (lookahead scheduler) ---- */
+  function Metronome(onBeat){ this.bpm=80; this.beats=4; this.accent=true; this.onBeat=onBeat; this.running=false; this.taps=[]; }
+  Metronome.prototype.setBpm=function(b){ this.bpm=Math.max(40,Math.min(208,Math.round(b))); return this.bpm; };
+  Metronome.prototype.click=function(time,beat){
+    var o=ctx.createOscillator(), g=ctx.createGain(), first=beat===0&&this.accent&&this.beats>1;
+    o.type='square'; o.frequency.value=first?1760:1175; g.gain.setValueAtTime(0.0001,time); g.gain.exponentialRampToValueAtTime(first?0.8:0.5,time+0.002); g.gain.exponentialRampToValueAtTime(0.001,time+0.05);
+    o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time+0.06);
+  };
+  Metronome.prototype.start=function(){
+    var self=this; unlock(); if(self.running) return; self.running=true; self.beat=0; self.queue=[];
+    whenRunning(function(){ if(!self.running) return; self.next=ctx.currentTime+0.1;
+      function sched(){ if(!self.running) return; var now=ctx.currentTime; if(self.next<now) self.next=now+0.05;   /* tab was paused: skip, don't burst */
+        while(self.next<now+0.2){ self.click(self.next,self.beat); self.queue.push({t:self.next,b:self.beat}); self.next+=60/self.bpm; self.beat=(self.beat+1)%self.beats; } }
+      sched(); self.timer=setInterval(sched,25);
+      (function draw(){ if(!self.running) return; while(self.queue.length&&self.queue[0].t<=ctx.currentTime){ var q=self.queue.shift(); self.onBeat&&self.onBeat(q.b,self.beats); }
+        self.raf=requestAnimationFrame(draw); })(); });
+  };
+  Metronome.prototype.stop=function(){ this.running=false; clearInterval(this.timer); cancelAnimationFrame(this.raf); this.onBeat&&this.onBeat(-1,this.beats); };
+  Metronome.prototype.tap=function(){
+    var now=performance.now(); this.taps=this.taps.filter(function(t){return now-t<2500;}); this.taps.push(now);
+    if(this.taps.length<2) return null; var iv=[]; for(var i=1;i<this.taps.length;i++) iv.push(this.taps[i]-this.taps[i-1]);
+    var avg=iv.reduce(function(a,b){return a+b;},0)/iv.length; return this.setBpm(60000/avg);
+  };
+
+  return {detectPitch:detectPitch,noteInfo:noteInfo,centsFrom:centsFrom,STRINGS:STRINGS,stringFreq:stringFreq,nearestString:nearestString,
+    unlock:unlock,Tuner:Tuner,Metronome:Metronome,playTone:playTone,startTone:startTone,stopTone:stopTone,toneOn:toneOn};
+})();
+if(typeof module!=='undefined') module.exports=StudioAudio;
+
+</script>
+<script>
+(function(){
+var A=StudioAudio, a4=440, playing=null, tuner=null, $=function(i){return document.getElementById(i);};
+A.STRINGS.forEach(function(s){ var b=document.createElement('button'); b.id='st'+s.name; b.innerHTML=s.name+'<sub style="font-size:15px">'+s.oct+'</sub>';
+  b.onclick=function(){ if(playing===s.name){ A.stopTone(); playing=null; } else { A.startTone(A.stringFreq(s,a4)); playing=s.name; showRef(s); } paint(); }; $('strings').appendChild(b); });
+function showRef(s){ if(tuner) return; $('note').innerHTML=s.name+'<sub>'+s.oct+'</sub>'; $('hz').textContent=A.stringFreq(s,a4).toFixed(1)+' Hz'; $('cents').textContent='Playing '+s.name+' \u2014 tune to this'; }
+function paint(cur){ A.STRINGS.forEach(function(s){ $('st'+s.name).className=playing===s.name?'play':cur===s.name?'on':''; }); $('stop').hidden=!(playing||tuner); }
+$('a4').oninput=function(){ a4=+this.value; $('a4v').textContent=a4; if(tuner) tuner.a4=a4; if(playing){ var s=A.STRINGS.filter(function(x){return x.name===playing;})[0]; A.startTone(A.stringFreq(s,a4)); showRef(s); } };
+function show(i){ if(!i) return; var c=Math.max(-50,Math.min(50,i.cents)), ac=Math.abs(i.cents);
+  $('note').innerHTML=i.name+'<sub>'+i.octave+'</sub>'; $('needle').style.left=(50+c)+'%';
+  $('cents').textContent=(i.cents>0?'+':i.cents<0?'\u2212':'')+ac+'\u00A2'+(ac<=5?' \u2713 In tune!':i.cents>0?' \u00B7 a little high':' \u00B7 a little low');
+  $('face').className='tface '+(ac<=5?'ok':ac<=15?'close':ac<=30?'off':'far'); $('emo').textContent=ac<=5?'\uD83D\uDE0A':ac<=15?'\uD83D\uDE10':'\uD83D\uDE41';
+  $('hz').textContent=i.freq.toFixed(1)+' Hz'; paint(i.string&&i.string.name); }
+window.tunerShow=show;
+function stopAll(){ if(tuner){ tuner.stop(); tuner=null; } if(playing){ A.stopTone(); playing=null; } $('listen').hidden=false; $('face').className='tface'; paint(); }
+$('stop').onclick=stopAll;
+$('listen').onclick=function(){ $('msg').textContent=''; if(playing){ A.stopTone(); playing=null; }
+  try{ tuner=new A.Tuner(show); tuner.a4=a4; }catch(e){ $('msg').textContent='This browser has no Web Audio.'; return; }
+  tuner.start().then(function(){ $('listen').hidden=true; $('cents').textContent='Listening\u2026 play one string'; paint(); })
+   .catch(function(e){ tuner=null; paint();
+     $('msg').textContent=e&&e.message==='NO_MIC_API'?'This browser can\u2019t use the microphone. Try Safari or Chrome.':
+       e&&e.name==='NotAllowedError'?'The microphone is turned off for this page. On iPhone/iPad: Settings \u203A Safari \u203A Microphone \u203A Allow (or tap aA \u203A Website Settings), then tap Listen again.':
+       e&&e.name==='NotFoundError'?'No microphone found.':'Could not start the microphone: '+((e&&e.message)||e); }); };
+document.addEventListener('visibilitychange',function(){ if(document.hidden) stopAll(); });
+window.addEventListener('pagehide',stopAll);
+})();
+</script>
+</body></html>

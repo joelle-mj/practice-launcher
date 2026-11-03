@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Practice Studio</title>
+<meta name="apple-mobile-web-app-title" content="Practice">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b1a3a">
+<meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="manifest" href="manifest.json">
+<script>
+var EXEC="https://script.google.com/macros/s/AKfycbyMPRITU61iRr4agd74rxP9xZCZcVi4_6SSvgzfFxV35x9jOU803sXkD6xmv19_zXeO/exec";
+var HASQ=!!(location.search&&location.search.length>1);
+var STANDALONE=(navigator.standalone===true)||!!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);
+if(HASQ&&STANDALONE){location.replace(EXEC+location.search);}
+</script>
+<style>
+html,body{margin:0;height:100%;background:#0b1a3a;color:#f8f3e6;font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+main{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;padding-top:calc(2rem + env(safe-area-inset-top));box-sizing:border-box}
+img{width:112px;height:112px;border-radius:25px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+h1{font-weight:400;letter-spacing:.04em;margin:1.3rem 0 .5rem;font-size:2rem}
+p{opacity:.85;font-style:italic;max-width:22rem;line-height:1.5;margin:.3rem 0 1.6rem}
+a.btn{display:inline-block;padding:.85rem 1.8rem;border:1px solid #d9c98f;border-radius:999px;color:#0b1a3a;background:#f8f3e6;text-decoration:none;font-size:1.05rem;letter-spacing:.03em}
+a.btn:active{background:#d9c98f}
+[hidden]{display:none!important}
+</style></head><body><main>
+<img src="apple-touch-icon.png" alt="">
+<h1>Practice Studio</h1>
+<p id="msg">Open your Practice Studio link, then tap Share &gt; Add to Home Screen.</p>
+<a id="open" class="btn" href="#" target="_self" hidden>Open Practice Studio</a>
+</main>
+<script>
+if(HASQ){
+  var m=document.getElementById('msg'),b=document.getElementById('open');
+  if(STANDALONE){m.textContent="Opening your studio\u2026";}
+  else{m.textContent="To add this to your Home Screen: tap Share, then Add to Home Screen.";}
+  b.href=EXEC+location.search;b.hidden=false;
+}
+</script>
+</body></html>
