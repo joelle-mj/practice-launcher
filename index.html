@@ -11,12 +11,13 @@
 <meta name="referrer" content="no-referrer">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
-<link rel="manifest" href="manifest.json">
 <script>
 var EXEC="https://script.google.com/macros/s/AKfycbyMPRITU61iRr4agd74rxP9xZCZcVi4_6SSvgzfFxV35x9jOU803sXkD6xmv19_zXeO/exec";
-var HASQ=!!(location.search&&location.search.length>1);
+var Q=(location.search&&location.search.length>1)?location.search:"";
+try{if(Q){localStorage.setItem("practiceQ",Q);}else{Q=localStorage.getItem("practiceQ")||"";}}catch(e){}
+var HASQ=!!Q;
 var STANDALONE=(navigator.standalone===true)||!!(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches);
-if(HASQ&&STANDALONE){location.replace(EXEC+location.search);}
+if(HASQ&&STANDALONE){location.replace(EXEC+Q);}
 </script>
 <style>
 html,body{margin:0;height:100%;background:#0b1a3a;color:#f8f3e6;font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
@@ -50,7 +51,7 @@ li{margin:.55rem 0}
 if(HASQ){
   var m=document.getElementById('msg');
   if(STANDALONE){m.textContent="Opening your studio\u2026";}
-  else{m.hidden=true;document.getElementById('setup').hidden=false;document.getElementById('open').href=EXEC+location.search;}
+  else{m.hidden=true;document.getElementById('setup').hidden=false;document.getElementById('open').href=EXEC+Q;}
 }
 </script>
 </body></html>
