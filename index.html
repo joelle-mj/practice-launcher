@@ -27,18 +27,30 @@ p{opacity:.85;font-style:italic;max-width:22rem;line-height:1.5;margin:.3rem 0 1
 a.btn{display:inline-block;padding:.85rem 1.8rem;border:1px solid #d9c98f;border-radius:999px;color:#0b1a3a;background:#f8f3e6;text-decoration:none;font-size:1.05rem;letter-spacing:.03em}
 a.btn:active{background:#d9c98f}
 [hidden]{display:none!important}
+.lead{font-style:normal;font-size:1.15rem;opacity:1;margin:.2rem auto 1rem}
+ol{text-align:left;max-width:22rem;margin:0 auto 1.6rem;padding-left:1.3rem;line-height:1.55;font-size:1.05rem}
+li{margin:.55rem 0}
+.ico{display:inline-block;border:1px solid #f8f3e6;border-radius:4px;padding:0 .3rem;font-size:.85rem}
 </style></head><body><main>
 <img src="apple-touch-icon.png" alt="">
 <h1>Practice Studio</h1>
-<p id="msg">Open your Practice Studio link, then tap Share &gt; Add to Home Screen.</p>
-<a id="open" class="btn" href="#" target="_self" hidden>Open Practice Studio</a>
+<div id="setup" hidden>
+<p class="lead">Put the Practice app on your Home Screen</p>
+<ol>
+<li>Make sure this page is open in <b>Safari</b>. (In the Google Docs or Gmail app, tap the &#8943; or compass button and choose <b>Open in Safari</b>.)</li>
+<li>Tap the <b>Share</b> button <span class="ico">&#x2B06;&#xFE0E;</span> at the bottom of Safari.</li>
+<li>Scroll down, tap <b>Add to Home Screen</b>, then tap <b>Add</b>.</li>
+<li>Open the new <b>Practice</b> icon. It goes straight to your studio.</li>
+</ol>
+<a id="open" class="btn" href="#" target="_self">Skip this and open my studio now</a>
+</div>
+<p id="msg">This link is missing its studio code. Please open the full link you were sent.</p>
 </main>
 <script>
 if(HASQ){
-  var m=document.getElementById('msg'),b=document.getElementById('open');
+  var m=document.getElementById('msg');
   if(STANDALONE){m.textContent="Opening your studio\u2026";}
-  else{m.textContent="To add this to your Home Screen: tap Share, then Add to Home Screen.";}
-  b.href=EXEC+location.search;b.hidden=false;
+  else{m.hidden=true;document.getElementById('setup').hidden=false;document.getElementById('open').href=EXEC+location.search;}
 }
 </script>
 </body></html>
